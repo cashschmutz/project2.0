@@ -71,26 +71,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) throw error;
   };
 
-  const signUp = async (email: string, password: string, fullName: string, role: 'admin' | 'employee') => {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-    });
-    if (error) throw error;
+// UPDATE the signUp function inside AuthContext.tsx
 
-    if (data.user) {
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .insert({
-          id: data.user.id,
-          email,
-          full_name: fullName,
-          role,
-        });
-
-      if (profileError) throw profileError;
+const signUp = async (email: string, password: string, fullName: string, role: 'admin' | 'employee') => {
+  // We ignore the 'role' argument here for security. 
+  // All new users start as 'employee'. Admins must be promoted via the Database Dashboard.
+  
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      data: {
+        full_name: fullName, // This is now caught by the Trigger we wrote above
+      }
     }
-  };
+  });
+
+  if (error) throw error;
+  
+  // REMOVED: The manual insert into 'profiles'. The database trigger handles it now.
+};
 
   const signOut = async () => {
     const { error } = await supabase.auth.signOut();
