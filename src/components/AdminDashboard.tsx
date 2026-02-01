@@ -19,24 +19,43 @@ export function AdminDashboard() {
     loadData();
   }, []);
 
-  const loadData = async () => {
-    try {
-      const [employeesResult, shiftsResult] = await Promise.all([
-        supabase.from('profiles').select('*').order('full_name'),
-        supabase.from('shifts').select('*'),
-      ]);
+  // Replace the loadData function with this optimized version
 
-      if (employeesResult.error) throw employeesResult.error;
-      if (shiftsResult.error) throw shiftsResult.error;
+const loadData = async () => {
+  try {
+    // Calculate date range (2 weeks back to 4 weeks forward to be safe)
+    const startDate = new Date(currentWeekStart);
+    startDate.setDate(startDate.getDate() - 14);
+    
+    const endDate = new Date(currentWeekStart);
+    endDate.setDate(endDate.getDate() + 28);
 
-      setEmployees(employeesResult.data || []);
-      setShifts(shiftsResult.data || []);
-    } catch (error) {
-      console.error('Error loading data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    const [employeesResult, shiftsResult] = await Promise.all([
+      supabase.from('profiles').select('*').order('full_name'),
+      supabase
+        .from('shifts')
+        .select('*')
+        .gte('shift_date', startDate.toISOString().split('T')[0]) // Filter Start
+        .lte('shift_date', endDate.toISOString().split('T')[0])   // Filter End
+    ]);
+
+    if (employeesResult.error) throw employeesResult.error;
+    if (shiftsResult.error) throw shiftsResult.error;
+
+    setEmployees(employeesResult.data || []);
+    setShifts(shiftsResult.data || []);
+  } catch (error) {
+    console.error('Error loading data:', error);
+  } finally {
+    setLoading(false);
+  }
+};
+
+// IMPORTANT: You must also add 'currentWeekStart' to the useEffect dependency array
+// so data re-fetches when the user changes weeks.
+useEffect(() => {
+  loadData();
+}, [currentWeekStart]);
 
   const publishAllDrafts = async () => {
     try {
