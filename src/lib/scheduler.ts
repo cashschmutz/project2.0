@@ -1,64 +1,73 @@
 import { supabase } from './supabase';
 
-export async function generateSchedule(startDate: Date) {
-  // 1. Fetch requirements, availability, and employees
-  const { data: requirements } = await supabase.from('route_requirements').select('*');
-  const { data: availabilities } = await supabase.from('availability').select('*');
-  const { data: employees } = await supabase.from('profiles').select('*');
-  
-  if (!requirements || !availabilities || !employees) return { error: 'Missing data' };
+interface Requirement {
+  id: string;
+  route_id: string;
+  day_of_week: string;
+  start_time: string;
+  end_time: string;
+}
+
+interface Availability {
+  user_id: string;
+  day_of_week: string;
+  start_time: string;
+  end_time: string;
+}
+
+export const generateDraftSchedule = async (weekStartDate: string) => {
+  // 1. Fetch all requirements (the slots you need filled)
+  const { data: requirements } = await supabase
+    .from('route_requirements')
+    .select('*');
+
+  // 2. Fetch all employee availabilities
+  const { data: availabilities } = await supabase
+    .from('availability')
+    .select('*');
+    
+  // 3. Fetch current drivers to track hours assigned (for fairness/limits)
+  const { data: drivers } = await supabase.from('profiles').select('id');
+
+  if (!requirements || !availabilities) return;
 
   const newShifts = [];
-  
-  // Helper to get actual date for "Monday", "Tuesday" etc.
-  const getDateForDay = (dayName: string) => {
-    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-    const targetIndex = days.indexOf(dayName);
-    const date = new Date(startDate);
-    // Assume startDate is a Monday. 
-    // If target is Tuesday (index 1), add 1 day.
-    date.setDate(date.getDate() + targetIndex);
-    return date.toISOString().split('T')[0];
-  };
 
-  // 2. Loop through every slot needed
+  // 4. The Matching Algorithm
   for (const req of requirements) {
-    const reqStart = parseInt(req.start_time.replace(':', ''));
-    const reqEnd = parseInt(req.end_time.replace(':', ''));
+    // Find drivers who are available on this day
+    const availableDrivers = availabilities.filter(a => 
+      a.day_of_week === req.day_of_week &&
+      // Simple string comparison for time (assuming HH:MM:SS format)
+      a.start_time <= req.start_time &&
+      a.end_time >= req.end_time
+    );
 
-    // Find drivers available
-    const availableDrivers = employees.filter(emp => {
-      const empAvail = availabilities.find(a => a.employee_id === emp.id && a.day_of_week === req.day_of_week);
-      if (!empAvail) return false;
-      
-      const availStart = parseInt(empAvail.start_time.replace(':', ''));
-      const availEnd = parseInt(empAvail.end_time.replace(':', ''));
-      return availStart <= reqStart && availEnd >= reqEnd;
-    });
-
-    // 3. Pick random available driver (You can improve this later)
-    const selectedDriver = availableDrivers.length > 0 
+    // Heuristic: Pick a random available driver to distribute load
+    // (In V2, you can pick based on least_hours_worked)
+    const assignedDriver = availableDrivers.length > 0 
       ? availableDrivers[Math.floor(Math.random() * availableDrivers.length)]
       : null;
 
-    if (selectedDriver) {
-      newShifts.push({
-        employee_id: selectedDriver.id,
-        route_id: req.route_id,
-        shift_date: getDateForDay(req.day_of_week),
-        start_time: req.start_time,
-        end_time: req.end_time,
-        shift_role: 'Driver',
-        is_published: false // Draft mode
-      });
-    }
+    newShifts.push({
+      route_id: req.route_id,
+      user_id: assignedDriver ? assignedDriver.user_id : null, // Null means "Open Shift"
+      day_of_week: req.day_of_week,
+      start_time: req.start_time,
+      end_time: req.end_time,
+      status: 'draft',
+      week_start_date: weekStartDate
+    });
   }
 
-  // 4. Insert Shifts
-  if (newShifts.length > 0) {
-    const { error } = await supabase.from('shifts').insert(newShifts);
-    if (error) throw error;
-  }
+  // 5. Save to DB
+  // First clear old drafts for this week to avoid duplicates
+  await supabase
+    .from('shifts')
+    .delete()
+    .eq('week_start_date', weekStartDate)
+    .eq('status', 'draft');
 
-  return { success: true, count: newShifts.length };
-}
+  const { error } = await supabase.from('shifts').insert(newShifts);
+  return { success: !error, error };
+};
