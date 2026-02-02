@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { LogIn, UserPlus } from 'lucide-react';
+import { LogIn, UserPlus, CheckCircle } from 'lucide-react';
 
 export function AuthPage() {
   const [isLogin, setIsLogin] = useState(true);
@@ -9,12 +9,14 @@ export function AuthPage() {
   const [fullName, setFullName] = useState('');
   const [role, setRole] = useState<'admin' | 'employee'>('employee');
   const [error, setError] = useState('');
+  const [message, setMessage] = useState(''); // New state for success messages
   const [loading, setLoading] = useState(false);
   const { signIn, signUp } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setMessage('');
     setLoading(true);
 
     try {
@@ -25,6 +27,9 @@ export function AuthPage() {
           throw new Error('Full name is required');
         }
         await signUp(email, password, fullName, role);
+        // If sign up succeeds but we aren't redirected, show instruction
+        setMessage('Account created! Please check your email to confirm your account before signing in.');
+        setIsLogin(true); // Switch back to login mode automatically
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
@@ -115,9 +120,18 @@ export function AuthPage() {
             />
           </div>
 
+          {/* Error Message */}
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
               {error}
+            </div>
+          )}
+
+          {/* Success Message (New) */}
+          {message && (
+            <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm flex items-start gap-2">
+              <CheckCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+              <span>{message}</span>
             </div>
           )}
 
@@ -135,6 +149,7 @@ export function AuthPage() {
             onClick={() => {
               setIsLogin(!isLogin);
               setError('');
+              setMessage('');
             }}
             className="text-blue-600 hover:text-blue-700 font-medium text-sm"
           >
