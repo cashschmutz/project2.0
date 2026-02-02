@@ -2,9 +2,6 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { Save, Clock } from 'lucide-react';
-import type { Database } from '../lib/database.types';
-
-type Availability = Database['public']['Tables']['availability']['Row'];
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 
@@ -43,7 +40,7 @@ export function AvailabilityForm() {
   const handleChange = (day: string, field: 'start' | 'end', value: string) => {
     setAvailabilities((prev) => ({
       ...prev,
-      [day]: { ...prev[day], [field]: value },
+      [day]: { ...prev[day] || {}, [field]: value },
     }));
   };
 
