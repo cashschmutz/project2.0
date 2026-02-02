@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { Calendar, Clock, Briefcase, ArrowLeftRight, Settings } from 'lucide-react';
+import { Calendar, Clock, Settings, ArrowLeftRight } from 'lucide-react';
 import { AvailabilityForm } from './AvailabilityForm';
 import type { Database } from '../lib/database.types';
 
@@ -37,6 +37,12 @@ export function EmployeeDashboard() {
     }
   };
 
+  const getDayName = (dateStr: string) => {
+    const date = new Date(dateStr);
+    // Add timezone offset correction if needed, or just use UTC
+    return date.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' });
+  };
+
   if (view === 'availability') {
     return (
       <div className="space-y-6">
@@ -64,7 +70,6 @@ export function EmployeeDashboard() {
         </button>
       </div>
 
-      {/* Existing Today's Shifts Logic */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <div className="flex items-center space-x-3 mb-6">
           <div className="bg-blue-600 p-2 rounded-lg">
@@ -74,16 +79,21 @@ export function EmployeeDashboard() {
         </div>
         
         {shifts.length === 0 ? (
-           <p className="text-gray-500">No upcoming shifts.</p>
+           <p className="text-gray-500 py-4 text-center">No upcoming shifts.</p>
         ) : (
           <div className="space-y-3">
              {shifts.map(shift => (
                <div key={shift.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg border border-gray-200">
                  <div>
                     <p className="font-semibold">{new Date(shift.shift_date).toLocaleDateString()}</p>
-                    <p className="text-sm text-gray-600">{formatTime(shift.start_time)} - {formatTime(shift.end_time)}</p>
-                    <p className="text-xs text-blue-600 font-bold">{shift.shift_role}</p>
+                    <p className="text-sm text-gray-600">
+                      {shift.start_time.slice(0, 5)} - {shift.end_time.slice(0, 5)}
+                    </p>
+                    <p className="text-xs text-blue-600 font-bold uppercase">{shift.shift_role}</p>
                  </div>
+                 <button className="p-2 hover:bg-gray-200 rounded-full text-gray-500" title="Request Swap">
+                    <ArrowLeftRight className="w-4 h-4" />
+                 </button>
                </div>
              ))}
           </div>
@@ -91,11 +101,4 @@ export function EmployeeDashboard() {
       </div>
     </div>
   );
-}
-
-function formatTime(time: string): string {
-  const [hour, minute] = time.split(':').map(Number);
-  const ampm = hour >= 12 ? 'PM' : 'AM';
-  const hour12 = hour % 12 || 12;
-  return `${hour12}:${minute.toString().padStart(2, '0')} ${ampm}`;
 }
