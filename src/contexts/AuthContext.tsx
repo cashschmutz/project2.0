@@ -46,7 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  const loadProfile = async (userId: string) => {
+  const loadProfile = async (userId: string, retryCount = 0) => {
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -55,11 +55,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .maybeSingle();
 
       if (error) throw error;
+
+      // FIX: If profile isn't found yet, wait 500ms and try again (up to 3 times)
+      if (!data && retryCount < 3) {
+        console.log(`Profile not found, retrying... (${retryCount + 1}/3)`);
+        setTimeout(() => loadProfile(userId, retryCount + 1), 500);
+        return;
+      }
+
       setProfile(data);
     } catch (error) {
       console.error('Error loading profile:', error);
     } finally {
-      setLoading(false);
+      // Only stop loading if we found data or ran out of retries
+      if (retryCount === 3 || data) {
+        setLoading(false);
+      }
     }
   };
 
