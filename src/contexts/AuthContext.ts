@@ -44,23 +44,37 @@ const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event
     return () => subscription.unsubscribe();
   }, []);
 
-  const loadProfile = async (userId: string, retryCount = 0) => {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
+const loadProfile = async (userId: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .maybeSingle();
 
-      if (error) throw error;
+    if (error) throw error;
+    
+    // ADD THIS: If no profile exists, show a helpful error
+    if (!data) {
+      console.error('No profile found for user:', userId);
+      alert('Profile not found. Please contact an administrator.');
+      await supabase.auth.signOut();
+    }
+    
+    setProfile(data);
+  } catch (error) {
+    console.error('Error loading profile:', error);
+  } finally {
+    setLoading(false);
+  }
+};
+```
 
-      // FIX: If profile isn't found yet, wait 500ms and try again (up to 3 times)
-      if (!data && retryCount < 3) {
-        console.log(`Profile not found, retrying... (${retryCount + 1}/3)`);
-        setTimeout(() => loadProfile(userId, retryCount + 1), 500);
-        return;
-      }
+## Quick Diagnostic
 
+Open your browser's console (F12) and look for this error:
+```
+Error loading profile: [some error]
       setProfile(data);
     } catch (error) {
       console.error('Error loading profile:', error);
