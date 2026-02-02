@@ -31,58 +31,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     });
 
-const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-  setUser(session?.user ?? null);
-  if (session?.user) {
-    await loadProfile(session.user.id);
-  } else {
-    setProfile(null);
-    setLoading(false);
-  }
-});
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      setUser(session?.user ?? null);
+      if (session?.user) {
+        await loadProfile(session.user.id);
+      } else {
+        setProfile(null);
+        setLoading(false);
+      }
+    });
 
     return () => subscription.unsubscribe();
   }, []);
 
-const loadProfile = async (userId: string) => {
-  try {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .maybeSingle();
+  const loadProfile = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
 
-    if (error) throw error;
-    
-    // ADD THIS: If no profile exists, show a helpful error
-    if (!data) {
-      console.error('No profile found for user:', userId);
-      alert('Profile not found. Please contact an administrator.');
-      await supabase.auth.signOut();
-    }
-    
-    setProfile(data);
-  } catch (error) {
-    console.error('Error loading profile:', error);
-  } finally {
-    setLoading(false);
-  }
-};
-```
-
-## Quick Diagnostic
-
-Open your browser's console (F12) and look for this error:
-```
-Error loading profile: [some error]
+      if (error) throw error;
+      
+      if (!data) {
+        // If profile is missing, force sign out to prevent loops
+        await supabase.auth.signOut();
+      }
+      
       setProfile(data);
     } catch (error) {
       console.error('Error loading profile:', error);
     } finally {
-      // Only stop loading if we found data or ran out of retries
-      if (retryCount === 3 || data) {
-        setLoading(false);
-      }
+      setLoading(false);
     }
   };
 
@@ -94,24 +75,20 @@ Error loading profile: [some error]
     if (error) throw error;
   };
 
-// UPDATE the signUp function inside AuthContext.tsx
-
-// In src/contexts/AuthContext.tsx
-
-const signUp = async (email: string, password: string, fullName: string, role: 'admin' | 'employee') => {
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      data: {
-        full_name: fullName,
-        role: role, // <--- Add this line to pass the role to the database trigger
+  const signUp = async (email: string, password: string, fullName: string, role: 'admin' | 'employee') => {
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          full_name: fullName,
+          role: role, 
+        }
       }
-    }
-  });
+    });
 
-  if (error) throw error;
-};
+    if (error) throw error;
+  };
 
   const signOut = async () => {
     const { error } = await supabase.auth.signOut();
