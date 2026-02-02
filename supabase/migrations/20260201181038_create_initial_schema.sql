@@ -212,3 +212,16 @@ CREATE TRIGGER update_shifts_updated_at
   BEFORE UPDATE ON shifts
   FOR EACH ROW
   EXECUTE FUNCTION update_updated_at_column();
+
+-- Add check constraint for role not empty
+ALTER TABLE shifts ADD CONSTRAINT shift_role_not_empty 
+  CHECK (length(trim(shift_role)) > 0);
+
+-- Add unique constraint to prevent overlapping shifts
+-- (This is complex - would need to use exclusion constraints with ranges)
+
+-- Add check for reasonable shift times (not spanning more than 24 hours)
+ALTER TABLE shifts ADD CONSTRAINT reasonable_shift_duration
+  CHECK (
+    EXTRACT(EPOCH FROM (shift_date + end_time) - (shift_date + start_time)) / 3600 <= 24
+  );
