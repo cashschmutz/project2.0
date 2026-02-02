@@ -1,110 +1,179 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { Plus, Users, Wand2 } from 'lucide-react';
-import { WeeklyGrid } from './WeeklyGrid';
-import { generateSchedule } from '../lib/scheduler';
-import type { Database } from '../lib/database.types';
+import { generateDraftSchedule } from '../lib/scheduler';
 
-type Profile = Database['public']['Tables']['profiles']['Row'];
-type Shift = Database['public']['Tables']['shifts']['Row'];
+export default function AdminDashboard() {
+  const [routes, setRoutes] = useState<any[]>([]);
+  const [requirements, setRequirements] = useState<any[]>([]);
+  const [shifts, setShifts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [view, setView] = useState<'routes' | 'schedule'>('schedule');
 
-export function AdminDashboard() {
-  const [employees, setEmployees] = useState<Profile[]>([]);
-  const [shifts, setShifts] = useState<Shift[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [currentWeekStart, setCurrentWeekStart] = useState(getMonday(new Date()));
+  useEffect(() => {
+    fetchData();
+  }, []);
 
-  useEffect(() => { loadData(); }, [currentWeekStart]);
-
-  const loadData = async () => {
-    const startDate = new Date(currentWeekStart);
-    startDate.setDate(startDate.getDate() - 7);
-    const endDate = new Date(currentWeekStart);
-    endDate.setDate(endDate.getDate() + 14);
-
-    const [empRes, shiftRes] = await Promise.all([
-      supabase.from('profiles').select('*').order('full_name'),
-      supabase.from('shifts').select('*').gte('shift_date', startDate.toISOString()).lte('shift_date', endDate.toISOString())
-    ]);
-
-    if (empRes.data) setEmployees(empRes.data);
-    if (shiftRes.data) setShifts(shiftRes.data);
-    setLoading(false);
+  const fetchData = async () => {
+    const { data: r } = await supabase.from('routes').select('*');
+    const { data: req } = await supabase.from('route_requirements').select('*, routes(name)');
+    const { data: s } = await supabase.from('shifts').select('*, routes(name), profiles(email)');
+    
+    if (r) setRoutes(r);
+    if (req) setRequirements(req);
+    if (s) setShifts(s);
   };
 
-  const handleAutoSchedule = async () => {
-    if(!confirm("Generate draft schedule for this week?")) return;
-    setLoading(true);
-    try {
-      await generateSchedule(currentWeekStart);
-      await loadData();
-      alert("Draft schedule generated!");
-    } catch (e) {
-      alert("Error generating schedule");
-      console.error(e);
-    } finally {
-      setLoading(false);
+  const handleCreateRoute = async () => {
+    const name = prompt("Enter Route Name (e.g., 'Blue Route')");
+    if (name) {
+      await supabase.from('routes').insert([{ name }]);
+      fetchData();
     }
   };
 
-  const publishAll = async () => {
-    if(!confirm("Publish all drafts?")) return;
-    await supabase.from('shifts').update({ is_published: true }).eq('is_published', false);
-    loadData();
+  const handleAddRequirement = async (routeId: string) => {
+    // Simplified input for demo - normally use a Modal
+    const day = prompt("Day? (Monday-Friday)");
+    const start = prompt("Start Time? (08:00)");
+    const end = prompt("End Time? (12:00)");
+    
+    if (day && start && end) {
+      await supabase.from('route_requirements').insert([{
+        route_id: routeId, day_of_week: day, start_time: start, end_time: end
+      }]);
+      fetchData();
+    }
   };
 
-  const previousWeek = () => {
-    const newDate = new Date(currentWeekStart);
-    newDate.setDate(newDate.getDate() - 7);
-    setCurrentWeekStart(newDate);
+  const handleGenerateSchedule = async () => {
+    setLoading(true);
+    // Assuming current week start for demo
+    await generateDraftSchedule('2026-02-02'); 
+    await fetchData();
+    setLoading(false);
+    alert("Draft Schedule Created!");
   };
 
-  const nextWeek = () => {
-    const newDate = new Date(currentWeekStart);
-    newDate.setDate(newDate.getDate() + 7);
-    setCurrentWeekStart(newDate);
+  const handlePublish = async () => {
+    await supabase
+      .from('shifts')
+      .update({ status: 'published' })
+      .eq('status', 'draft');
+    fetchData();
+    alert("Schedule Published to Employees!");
   };
 
-  if (loading) return <div className="p-8">Loading...</div>;
+  const exportToCSV = () => {
+    const headers = ['Day', 'Route', 'Start', 'End', 'Driver', 'Email'];
+    const rows = shifts.map(s => [
+      s.day_of_week, 
+      s.routes?.name, 
+      s.start_time, 
+      s.end_time, 
+      s.user_id ? 'Assigned' : 'OPEN', 
+      s.profiles?.email || 'N/A'
+    ]);
+    
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + [headers, ...rows].map(e => e.join(",")).join("\n");
+      
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "schedule_export.csv");
+    document.body.appendChild(link);
+    link.click();
+  };
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center bg-white p-6 rounded-xl shadow-sm border">
-        <div>
-           <h2 className="text-2xl font-bold">Manager Dashboard</h2>
-           <p className="text-gray-500">Week of {currentWeekStart.toLocaleDateString()}</p>
-        </div>
-        <div className="flex space-x-3">
-           <button onClick={previousWeek} className="px-3 py-2 border rounded hover:bg-gray-50">← Prev</button>
-           <button onClick={nextWeek} className="px-3 py-2 border rounded hover:bg-gray-50">Next →</button>
+    <div className="p-6">
+      <div className="flex justify-between mb-6">
+        <h1 className="text-2xl font-bold">Manager Dashboard</h1>
+        <div className="space-x-4">
+          <button onClick={() => setView('routes')} className="px-4 py-2 bg-gray-200 rounded">Manage Routes</button>
+          <button onClick={() => setView('schedule')} className="px-4 py-2 bg-blue-100 rounded">View Schedule</button>
         </div>
       </div>
 
-      <div className="flex space-x-3 justify-end">
-           <button onClick={handleAutoSchedule} className="flex items-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700">
-             <Wand2 className="w-4 h-4" /> <span>Auto-Schedule (Draft)</span>
-           </button>
-           <button onClick={publishAll} className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
-             <Plus className="w-4 h-4" /> <span>Publish All</span>
-           </button>
-      </div>
+      {view === 'routes' && (
+        <div className="bg-white p-6 rounded shadow">
+          <div className="flex justify-between mb-4">
+            <h2 className="text-xl">Route Requirements (The Skeleton)</h2>
+            <button onClick={handleCreateRoute} className="bg-green-500 text-white px-3 py-1 rounded">+ Add Route</button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {routes.map(route => (
+              <div key={route.id} className="border p-4 rounded">
+                <h3 className="font-bold text-lg text-blue-600">{route.name}</h3>
+                <button 
+                  onClick={() => handleAddRequirement(route.id)}
+                  className="text-sm text-gray-500 hover:text-black mb-2"
+                >
+                  + Add Required Slot
+                </button>
+                <ul className="text-sm">
+                  {requirements.filter(r => r.route_id === route.id).map(req => (
+                    <li key={req.id} className="flex justify-between border-b py-1">
+                      <span>{req.day_of_week}</span>
+                      <span>{req.start_time.slice(0,5)} - {req.end_time.slice(0,5)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
-      <div className="bg-white rounded-xl shadow-sm border p-6">
-        <WeeklyGrid 
-          weekStart={currentWeekStart} 
-          employees={employees} 
-          shifts={shifts} 
-          onShiftsChange={loadData} 
-        />
-      </div>
+      {view === 'schedule' && (
+        <div className="bg-white p-6 rounded shadow">
+          <div className="flex justify-between mb-4 items-center">
+            <h2 className="text-xl">Schedule (Drafts are yellow, Published are green)</h2>
+            <div className="space-x-2">
+              <button onClick={handleGenerateSchedule} disabled={loading} className="bg-purple-600 text-white px-4 py-2 rounded">
+                {loading ? 'Generating...' : '1. Generate Draft'}
+              </button>
+              <button onClick={handlePublish} className="bg-green-600 text-white px-4 py-2 rounded">
+                2. Publish Live
+              </button>
+              <button onClick={exportToCSV} className="bg-gray-600 text-white px-4 py-2 rounded">
+                Export CSV
+              </button>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="min-w-full table-auto">
+              <thead className="bg-gray-100">
+                <tr>
+                  <th className="px-4 py-2">Day</th>
+                  <th className="px-4 py-2">Route</th>
+                  <th className="px-4 py-2">Time</th>
+                  <th className="px-4 py-2">Driver</th>
+                  <th className="px-4 py-2">Status</th>
+                  <th className="px-4 py-2">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {shifts.map(shift => (
+                  <tr key={shift.id} className={shift.status === 'draft' ? 'bg-yellow-50' : 'bg-green-50'}>
+                    <td className="border px-4 py-2">{shift.day_of_week}</td>
+                    <td className="border px-4 py-2 font-medium">{shift.routes?.name}</td>
+                    <td className="border px-4 py-2">{shift.start_time.slice(0,5)} - {shift.end_time.slice(0,5)}</td>
+                    <td className="border px-4 py-2">
+                      {shift.profiles?.email || <span className="text-red-500 font-bold">UNASSIGNED</span>}
+                    </td>
+                    <td className="border px-4 py-2 uppercase text-xs font-bold text-gray-500">{shift.status}</td>
+                    <td className="border px-4 py-2">
+                      <button className="text-blue-500 text-sm">Edit</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
-}
-
-function getMonday(date: Date) {
-  const d = new Date(date);
-  const day = d.getDay(), diff = d.getDate() - day + (day == 0 ? -6 : 1);
-  const monday = new Date(d.setDate(diff));
-  monday.setHours(0,0,0,0);
-  return monday;
 }
