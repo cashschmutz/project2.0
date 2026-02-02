@@ -22,6 +22,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Check active session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       if (session?.user) {
@@ -31,6 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     });
 
+    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setUser(session?.user ?? null);
       if (session?.user) {
@@ -54,8 +56,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (error) throw error;
       
+      // If profile is missing, force sign out to prevent loops
       if (!data) {
-        // If profile is missing, force sign out to prevent loops
+        console.warn('User logged in but profile is missing. Signing out...');
         await supabase.auth.signOut();
       }
       
@@ -75,6 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) throw error;
   };
 
+  // THIS IS THE CRITICAL FIX: Sending metadata (full_name, role) during sign up
   const signUp = async (email: string, password: string, fullName: string, role: 'admin' | 'employee') => {
     const { error } = await supabase.auth.signUp({
       email,
