@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
 
 export async function generateSchedule(startDate: Date) {
-  // 1. Fetch requirements and employees
+  // 1. Fetch requirements, availability, and employees
   const { data: requirements } = await supabase.from('route_requirements').select('*');
   const { data: availabilities } = await supabase.from('availability').select('*');
   const { data: employees } = await supabase.from('profiles').select('*');
@@ -14,8 +14,9 @@ export async function generateSchedule(startDate: Date) {
   const getDateForDay = (dayName: string) => {
     const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
     const targetIndex = days.indexOf(dayName);
-    // Assume startDate is the upcoming Monday
     const date = new Date(startDate);
+    // Assume startDate is a Monday. 
+    // If target is Tuesday (index 1), add 1 day.
     date.setDate(date.getDate() + targetIndex);
     return date.toISOString().split('T')[0];
   };
@@ -35,7 +36,7 @@ export async function generateSchedule(startDate: Date) {
       return availStart <= reqStart && availEnd >= reqEnd;
     });
 
-    // 3. Pick random driver (Basic logic)
+    // 3. Pick random available driver (You can improve this later)
     const selectedDriver = availableDrivers.length > 0 
       ? availableDrivers[Math.floor(Math.random() * availableDrivers.length)]
       : null;
